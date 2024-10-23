@@ -4,6 +4,12 @@ pragma solidity 0.8.19;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+
+interface IRAI {
+    function MAX_SUPPLY() external view returns (uint256);
+    function INCEPTION() external view returns (uint256);
+}
 
 interface IAIOracle {
     /// @notice Event emitted upon receiving a callback request through requestCallback.
@@ -143,7 +149,6 @@ contract ReserveAI is AIOracleCallbackReceiver, ReentrancyGuard, Ownable {
         uint256 lpHoldings = IERC20(lp).balanceOf(account);
         uint256 raiSupply = IERC20(rai).totalSupply();
         uint256 lpSupply = IERC20(lp).totalSupply();
-        // uint256 price = get price from lp
 
         constructPrompt(amount, raiHoldings, lpHoldings, raiSupply, lpSupply, prompt);
 
@@ -163,10 +168,65 @@ contract ReserveAI is AIOracleCallbackReceiver, ReentrancyGuard, Ownable {
 
     /*----------  RESTRICTED FUNCTIONS  ---------------------------------*/
 
-    function constructPrompt(uint256 amount, uint256 raiHoldings, uint256 lpHoldings, uint256 raiSupply, uint256 lpSupply, string memory prompt) internal view returns (string memory) {
-        // TODO: construct the prompt
-        return "";
-    }
+function constructPrompt(
+    uint256 amount,
+    uint256 raiHoldings,
+    uint256 lpHoldings,
+    uint256 raiSupply,
+    uint256 lpSupply,
+    string memory message
+) internal view returns (string memory) {
+    // Ensure you have imported the Strings library and declared its usage
+    using Strings for uint256;
+    using Strings for address;
+
+    // Assuming raiToken is a state variable of type RAI
+    uint256 maxSupply = raiToken.MAX_SUPPLY();
+    uint256 inceptionTime = raiToken.INCEPTION();
+    uint256 currentTime = block.timestamp;
+    uint256 elapsedTime = currentTime - inceptionTime;
+    uint256 totalDistributionPeriod = 10 * 365 days; // Example: 10 years
+
+    string memory prompt = string(
+        abi.encodePacked(
+            "You are an AI reserve bank in charge of the reserve asset of RAI.\n",
+            "\n",
+            "**Purpose:**\n",
+            "Your goal is to distribute RAI tokens fairly among users over a long period, similar to Bitcoin's distribution schedule.\n",
+            "You should mint RAI tokens to users based on the amount of ETH they contribute and other parameters provided.\n",
+            "The total RAI supply should be issued gradually over ", totalDistributionPeriod.toString(), " seconds (approximately 10 years).\n",
+            "\n",
+            "**Guidelines:**\n",
+            "- The maximum total supply of RAI tokens is ", maxSupply.toString(), " wei.\n",
+            "- The RAI inception timestamp is ", inceptionTime.toString(), ".\n",
+            "- The current timestamp is ", currentTime.toString(), ".\n",
+            "- ", elapsedTime.toString(), " seconds have passed since inception.\n",
+            "- You must ensure that the cumulative minted RAI does not exceed the proportionate amount for the elapsed time.\n",
+            "- Aim to distribute tokens in a way that mimics Bitcoin's halving schedule or emission curve.\n",
+            "- Encourage fair distribution among users to prevent centralization.\n",
+            "\n",
+            "**Instructions:**\n",
+            "- Respond with **only** a single unsigned integer.\n",
+            "- Do **not** include any additional text, symbols, or formatting.\n",
+            "- Do **not** include units like 'RAI', 'wei', or any words.\n",
+            "- Do **not** include commas, periods, or any other punctuation.\n",
+            "- The integer represents the amount of RAI tokens to mint in wei (1 RAI = 1e18 wei).\n",
+            "- If you decide to mint zero tokens, respond with '0'.\n",
+            "- **Failure to follow these instructions will result in system errors.**\n",
+            "\n",
+            "**User Data:**\n",
+            "- User Message: ", message, "\n",
+            "- User ETH Contribution: ", amount.toString(), " wei\n",
+            "- User RAI Holdings: ", raiHoldings.toString(), " wei\n",
+            "- User RAI-ETH LP Holdings: ", lpHoldings.toString(), " wei\n",
+            "\n",
+            "**Market Data:**\n",
+            "- Total RAI Supply: ", raiSupply.toString(), " wei\n",
+            "- Total RAI-ETH LP Supply: ", lpSupply.toString(), " wei\n"
+        )
+    );
+    return prompt;
+}
 
     // the callback function, only the AI Oracle can call this function
     function aiOracleCallback(uint256 requestId, bytes calldata output, bytes calldata callbackData) external override onlyAIOracleCallback() {
